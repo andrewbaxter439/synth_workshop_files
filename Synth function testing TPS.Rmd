@@ -1,0 +1,172 @@
+---
+title: "Synth function testing TPS"
+author: "Andy Baxter"
+date: "17/09/2021"
+output: html_document
+---
+
+# Using the Synth package to do synthetic control analysis on England's Teenage Pregnancy Strategy
+
+This is some R code to repeat the analyses described in the video and contained within the [shiny app](https://phd.andybaxter.me/synth-app). These steps are described in Abadie et al., [2011](http://www.jstatsoft.org/v42/i13/).
+
+Setting up and importing data:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load("data/synth_data.rdata")
+library(tidyverse)
+library(Synth)
+
+u18_birth_rates <- select(synthData_u18_filt, Code, Country, Year, rate)
+ccodes <- u_18_ccodes_f
+
+
+theme_set(theme_minimal())
+```
+
+## Graphing pre-intervention rates across countries
+
+The intervention year is set to 1999. Looking at the pre-intervention years, England and Wales are not an 'outlier', so the Synthetic Control method should be possible here.
+
+```{r graphing_pre}
+
+u18_birth_rates %>% 
+  filter(Year < 1999) %>% 
+  mutate(Country = fct_reorder2(Country, Year, rate)) %>% 
+  ggplot(aes(Year, rate, colour = Country)) +
+  geom_line() 
+
+```
+
+## Preparing data
+
+This step is described by Abadie et al., (2011) and uses the `dataprep` function from the Synth package.
+
+```{r dataprep}
+
+dp_u18 <- dataprep(
+  foo = u18_birth_rates,
+  dependent = "rate",
+  # `synth` can take the mean for each country across all years as one
+  # predictor. Here I've opted to split years into clustered periods, as this
+  # improves model fit by allowing fitted trend to match England's
+  # pre-intervention trend shape
+  special.predictors = list(
+    a = list("rate", yrs = 1990:1993, "mean"),
+    b = list("rate", yrs = 1994L, "mean"),
+    c = list("rate", yrs = 1995L, "mean"),
+    d = list("rate", yrs = 1996:1998, "mean")
+  ),
+  time.variable = "Year",
+  unit.variable = "Code", 
+  unit.names.variable = "Country",
+  time.optimize.ssr = 1990:1998,
+  time.predictors.prior = 1990:1998,
+  treatment.identifier = ccodes$Code[ccodes$Country == "England and Wales"],
+  controls.identifier = ccodes$Code[ccodes$Country != "England and Wales"],
+  time.plot = 1990:2013
+)
+
+```
+
+Aside - the `dataprep` function creates four tables to pass on to the `synth` function. These contain the yearly birth rates across the optimising period (1990 to 1998) for England, the yearly birth rates for control countries, and the means of birth rates across the four groups of predictor years (see above) fo England and for control countries. Uncomment the lines below to see the data that `synth` will use when constructing a control series:
+
+```{r compute_tables}
+
+# knitr::kable(dp_u18$Z1)
+# knitr::kable(dp_u18$Z0)
+# knitr::kable(dp_u18$X1)
+# knitr::kable(dp_u18$X0)
+
+```
+
+It also stores the rates for each country (England and Wales, control countries) for the whole of the plotting period, which we will use later (`dp_u18$Y1` and `dp_u18$Y0`).
+
+
+## Fitting model
+
+```{r}
+
+# The `synth` function fits the prepared date
+# The `so` object we create here can be used to further explore the result
+so <- synth(dp_u18)
+
+```
+
+The `synth` function optimises pre-intervention fit (minimising MSPE) by assigning a series of weights to donor countries. The outputs above:
+
+- The weights applied to each country are listed in `soution.w`.
+- The pre-intervention MSPE for our model (MSPE/LOSS V) is `r so$loss.v`.
+
+We can use these weights to get predictions:
+
+```{r getting_pred}
+
+# This multiples the matrix of donor values by year by the vector of country
+# weights to produce a time series vector of predicted rates
+
+# dp_u18$Y0 = observed rates across control countries
+synthC <- dp_u18$Y0 %*% so$solution.w
+
+# Extracting the mspe for use later
+mspe <- so$loss.v[1]
+
+
+md <-
+  tibble(
+    Year = 1990:2013,
+    Treated = dp_u18$Y1[, 1],  # dp_u18$Y1 = observed rates in England
+    Synthetic = synthC[, 1]    # Our predicted rates from above
+  ) %>%
+  pivot_longer(-Year, names_to = "Group", values_to = "Rate")
+
+md
+```
+
+# Graphing predictions
+
+Pre-intervention period only:
+
+```{r pre-only}
+md %>% 
+  filter(Year < 1999) %>% 
+  ggplot(aes(Year, Rate, colour = Group)) +
+  geom_line() +
+  ylim(0, NA) +
+  geom_vline(xintercept = 1998.5, linetype = "dashed")
+```
+
+This seems like a good fit! Let's plot the whole period to see if the strategy produced a noticable difference after 1999:
+
+```{r whole_graph}
+
+
+md %>%
+  ggplot(aes(Year, Rate, colour = Group)) +
+  geom_line() +
+  ylim(0, NA) +
+  geom_vline(xintercept = 1998.5, linetype = "dashed") +
+  labs(subtitle = paste0("Pre-intervention MSPE = ", signif(mspe, 3)))
+
+```
+
+# Looking at weightngs
+
+`Synth` can output some tables for us to see what's going on under the surface:
+
+```{r}
+
+
+st <- synth.tab(so, dp_u18)
+
+st$tab.w %>% 
+  arrange(desc(w.weights)) %>% 
+  select(Country = unit.names, Weight = w.weights) %>%
+  knitr::kable(caption = "Country weights")
+
+```
+Scotland has been given the majority of the weight (67.2%). Portugal (29.5%), the USA (1.6%) and New Zealand (1.2%) have been included and weighted too.
+
+Note that these weights add up to 1. This is one of the advantages of the Synthetic Control method - it doesn't extrapolate outside of the limits set by the highest and lowest observations in the donor pool in choosing suitable comparators. If England and Wales had shown the highest rates across the pre-intervention period, the Synthetic Control method assumes that multiplying lower rates by a factor greater than 1 (e.g. doubling the observed rates in a low-birthrate country) does not give a valid prediction of the relative rate changes in England and Wales, and therefore there would be no suitable comparators.
+
+
