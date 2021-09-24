@@ -1,30 +1,37 @@
----
-title: "Synth function testing TPS"
-author: "Andy Baxter"
-date: "17/09/2021"
-output: html_document
----
+# ---
+# title: "Synth function testing TPS"
+# author: "Andy Baxter"
+# date: "17/09/2021"
+# output: html_document
+# ---
+# 
+# # Using the Synth package to do synthetic control analysis on England's
+# Teenage Pregnancy Strategy
+#
+# This is some R code to repeat the analyses described in the video and
+# contained within the [shiny app](https://phd.andybaxter.me/synth-app). These
+# steps are described in Abadie et al.,
+# [2011](http://www.jstatsoft.org/v42/i13/).
+#
+# Setting up and importing data:
+# 
+# # ----setup ----------------------------------------------------------------------------------------------
 
-# Using the Synth package to do synthetic control analysis on England's Teenage Pregnancy Strategy
-
-This is some R code to repeat the analyses described in the video and contained within the [shiny app](https://phd.andybaxter.me/synth-app). These steps are described in Abadie et al., [2011](http://www.jstatsoft.org/v42/i13/).
-
-Setting up and importing data:
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 load("data/synth_dat.rdata")
 library(tidyverse)
 library(Synth)
 
 theme_set(theme_minimal())
-```
 
-## Graphing pre-intervention rates across countries
-
-The intervention year is set to 1999. Looking at the pre-intervention years, England and Wales are not an 'outlier', so the Synthetic Control method should be possible here.
-
-```{r graphing_pre}
+#
+# # # Graphing pre-intervention rates across countries
+#
+# The intervention year is set to 1999. Looking at the pre-intervention years,
+# England and Wales are not an 'outlier', so the Synthetic Control method should
+# be possible here.
+#
+# #
+# ----graphing_pre------------------------------------------------------------------------------------------------------
 
 u18_birth_rates %>% 
   filter(Year < 1999) %>% 
@@ -32,13 +39,15 @@ u18_birth_rates %>%
   ggplot(aes(Year, rate, colour = Country)) +
   geom_line() 
 
-```
 
-## Preparing data
-
-This step is described by Abadie et al., (2011) and uses the `dataprep` function from the Synth package.
-
-```{r dataprep}
+#
+# # # Preparing data
+#
+# This step is described by Abadie et al., (2011) and uses the `dataprep`
+# function from the Synth package.
+#
+# #
+# ----dataprep----------------------------------------------------------------------------------------------------------
 
 dp_u18 <- dataprep(
   foo = u18_birth_rates,
@@ -63,40 +72,51 @@ dp_u18 <- dataprep(
   time.plot = 1990:2013
 )
 
-```
 
-Aside - the `dataprep` function creates four tables to pass on to the `synth` function. These contain the yearly birth rates across the optimising period (1990 to 1998) for England, the yearly birth rates for control countries, and the means of birth rates across the four groups of predictor years (see above) fo England and for control countries. Uncomment the lines below to see the data that `synth` will use when constructing a control series:
-
-```{r compute_tables}
+#
+# Aside - the `dataprep` function creates four tables to pass on to the `synth`
+# function. These contain the yearly birth rates across the optimising period
+# (1990 to 1998) for England, the yearly birth rates for control countries, and
+# the means of birth rates across the four groups of predictor years (see above)
+# fo England and for control countries. Uncomment the lines below to see the
+# data that `synth` will use when constructing a control series:
+#
+# #
+# ----compute_tables----------------------------------------------------------------------------------------------------
 
 # knitr::kable(dp_u18$Z1)
 # knitr::kable(dp_u18$Z0)
 # knitr::kable(dp_u18$X1)
 # knitr::kable(dp_u18$X0)
 
-```
 
-It also stores the rates for each country (England and Wales, control countries) for the whole of the plotting period, which we will use later (`dp_u18$Y1` and `dp_u18$Y0`).
-
-
-## Fitting model
-
-```{r}
+#
+# It also stores the rates for each country (England and Wales, control
+# countries) for the whole of the plotting period, which we will use later
+# (`dp_u18$Y1` and `dp_u18$Y0`).
+#
+#
+# # # Fitting model
+#
+# #
+# ----------------------------------------------------------------------------------------------------------------------
 
 # The `synth` function fits the prepared date
 # The `so` object we create here can be used to further explore the result
 so <- synth(dp_u18)
 
-```
 
-The `synth` function optimises pre-intervention fit (minimising MSPE) by assigning a series of weights to donor countries. The outputs above:
-
-- The weights applied to each country are listed in `soution.w`.
-- The pre-intervention MSPE for our model (MSPE/LOSS V) is `r so$loss.v`.
-
-We can use these weights to get predictions:
-
-```{r getting_pred}
+#
+# The `synth` function optimises pre-intervention fit (minimising MSPE) by
+# assigning a series of weights to donor countries. The outputs above:
+#
+# - The weights applied to each country are listed in `soution.w`. - The
+# pre-intervention MSPE for our model (MSPE/LOSS V) is `r so$loss.v`.
+#
+# We can use these weights to get predictions:
+#
+# #
+# ----getting_pred------------------------------------------------------------------------------------------------------
 
 # This multiples the matrix of donor values by year by the vector of country
 # weights to produce a time series vector of predicted rates
@@ -117,24 +137,26 @@ md <-
   pivot_longer(-Year, names_to = "Group", values_to = "Rate")
 
 md
-```
 
-# Graphing predictions
-
-Pre-intervention period only:
-
-```{r pre-only}
+# 
+# # Graphing predictions
+# 
+# Pre-intervention period only:
+# 
+# # ----pre-only----------------------------------------------------------------------------------------------------------
 md %>% 
   filter(Year < 1999) %>% 
   ggplot(aes(Year, Rate, colour = Group)) +
   geom_line() +
   ylim(0, NA) +
   geom_vline(xintercept = 1998.5, linetype = "dashed")
-```
 
-This seems like a good fit! Let's plot the whole period to see if the strategy produced a noticable difference after 1999:
-
-```{r whole_graph}
+#
+# This seems like a good fit! Let's plot the whole period to see if the strategy
+# produced a noticable difference after 1999:
+#
+# #
+# ----whole_graph-------------------------------------------------------------------------------------------------------
 
 
 md %>%
@@ -144,13 +166,13 @@ md %>%
   geom_vline(xintercept = 1998.5, linetype = "dashed") +
   labs(subtitle = paste0("Pre-intervention MSPE = ", signif(mspe, 3)))
 
-```
 
-# Looking at weightngs
-
-`Synth` can output some tables for us to see what's going on under the surface:
-
-```{r}
+# 
+# # Looking at weightngs
+# 
+# `Synth` can output some tables for us to see what's going on under the surface:
+# 
+# # ----------------------------------------------------------------------------------------------------------------------
 
 
 st <- synth.tab(so, dp_u18)
@@ -160,16 +182,29 @@ st$tab.w %>%
   select(Country = unit.names, Weight = w.weights) %>%
   knitr::kable(caption = "Country weights")
 
-```
-Scotland has been given the majority of the weight (67.2%). Portugal (29.5%), the USA (1.6%) and New Zealand (1.2%) have been included and weighted too.
 
-Note that these weights add up to 1. This is one of the advantages of the Synthetic Control method - it doesn't extrapolate outside of the limits set by the highest and lowest observations in the donor pool in choosing suitable comparators. If England and Wales had shown the highest rates across the pre-intervention period, the Synthetic Control method assumes that multiplying lower rates by a factor greater than 1 (e.g. doubling the observed rates in a low-birthrate country) does not give a valid prediction of the relative rate changes in England and Wales, and therefore there would be no suitable comparators.
-
-## Placebo tests by country
-
-The next task is to do country placebo tests. To do this we remove England and Wales from the donor pool and re-run for all other countries. This takes time to compute. Do set it to run we can write a quick function with all the steps we've taken so far:
-
-```{r generatePlacebos_func}
+# Scotland has been given the majority of the weight (67.2%). Portugal (29.5%),
+# the USA (1.6%) and New Zealand (1.2%) have been included and weighted too.
+#
+# Note that these weights add up to 1. This is one of the advantages of the
+# Synthetic Control method - it doesn't extrapolate outside of the limits set by
+# the highest and lowest observations in the donor pool in choosing suitable
+# comparators. If England and Wales had shown the highest rates across the
+# pre-intervention period, the Synthetic Control method assumes that multiplying
+# lower rates by a factor greater than 1 (e.g. doubling the observed rates in a
+# low-birthrate country) does not give a valid prediction of the relative rate
+# changes in England and Wales, and therefore there would be no suitable
+# comparators.
+#
+# # # Placebo tests by country
+#
+# The next task is to do country placebo tests. To do this we remove England and
+# Wales from the donor pool and re-run for all other countries. This takes time
+# to compute. Do set it to run we can write a quick function with all the steps
+# we've taken so far:
+#
+# #
+# ----generatePlacebos_func---------------------------------------------------------------------------------------------
 
 generatePlacebos <- function(data,
                              predictors = NULL,
@@ -235,11 +270,13 @@ generatePlacebos <- function(data,
   }
   return(placebos)
 }
-```
 
-And we'll use this to get our placebo predictions alongside observations for each country:
-
-```{r generating_placebos}
+#
+# And we'll use this to get our placebo predictions alongside observations for
+# each country:
+#
+# #
+# ----generating_placebos-----------------------------------------------------------------------------------------------
 pl_u18 <- generatePlacebos(u18_birth_rates,
                            special.predictors = list(
                              a = list("rate", yrs = 1990:1993, "mean"),
@@ -247,11 +284,14 @@ pl_u18 <- generatePlacebos(u18_birth_rates,
                              c = list("rate", yrs = 1995L, "mean"),
                              d = list("rate", yrs = 1996:1998, "mean")
                            ))
-```
 
-Now we have placebo tests for each country, our next step with this is to plot the 'gaps' - the yearly differences between the observed and predicted rate for each country. For speed, let's define another function:
-
-```{r gg_gaps_func}
+#
+# Now we have placebo tests for each country, our next step with this is to plot
+# the 'gaps' - the yearly differences between the observed and predicted rate
+# for each country. For speed, let's define another function:
+#
+# #
+# ----gg_gaps_func------------------------------------------------------------------------------------------------------
 
 gg_gaps <- function(md, pl, dp = NULL, mspe_limit) {
 
@@ -281,19 +321,24 @@ gg_gaps <- function(md, pl, dp = NULL, mspe_limit) {
   p
   
 }
-```
 
-Now pass our model and placebos to the function, and use the `mspe` from the fitted model to filter which countries will show (with less than 5 times the MSPE of England and Wales):
-
-```{r gg_gaps}
+#
+# Now pass our model and placebos to the function, and use the `mspe` from the
+# fitted model to filter which countries will show (with less than 5 times the
+# MSPE of England and Wales):
+#
+# #
+# ----gg_gaps-----------------------------------------------------------------------------------------------------------
 
 gg_gaps(md, pl_u18, mspe_limit = mspe)
 
-```
 
-Finally, we can calculate MSPE ratios for each country and compare (using another rather long function!):
-
-```{r gg_pre_post_func}
+#
+# Finally, we can calculate MSPE ratios for each country and compare (using
+# another rather long function!):
+#
+# #
+# ----gg_pre_post_func--------------------------------------------------------------------------------------------------
 
 gg_pre_postMSPE_tab <- function(md, pl) {
   
@@ -393,14 +438,16 @@ gg_pre_postMSPE_tab <- function(md, pl) {
   
 }
 
-```
 
-Plotting:
-
-```{r gg_pre_post_mspe}
+# 
+# Plotting:
+# 
+# # ----gg_pre_post_mspe--------------------------------------------------------------------------------------------------
 
 gg_pre_postMSPE_tab(md, pl_u18)
 
-```
 
-England and Wales saw a pretty low relative ratio, close to 1, indicating a relatively well-fit series of pre-intervention predictions and/or a relatively small deviation from null-effect predictions across the exposure period.
+#
+# England and Wales saw a pretty low relative ratio, close to 1, indicating a
+# relatively well-fit series of pre-intervention predictions and/or a relatively
+# small deviation from null-effect predictions across the exposure period.
